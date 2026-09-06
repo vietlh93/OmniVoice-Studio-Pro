@@ -19,6 +19,13 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 os.environ["GRADIO_ANALYTICS_ENABLED"] = "False"
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 
+if sys.platform == "win32":
+    import asyncio
+    try:
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    except Exception:
+        pass
+
 import torch
 import gradio as gr
 from gradio.components.textbox import InputHTMLAttributes
