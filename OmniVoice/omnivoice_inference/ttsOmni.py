@@ -5,6 +5,7 @@ from __future__ import annotations
 
 # Set HF Hub env vars BEFORE importing transformers to disable warnings
 import os
+import re
 import math
 from pedalboard import Pedalboard as PB, PitchShift
 
@@ -39,10 +40,11 @@ import numpy as np
 import torch
 
 try:
-    from .omnivoice_support.ttsOmni_Config import inferWithModelOmni
+    from .omnivoice_support.ttsOmni_Config import inferWithModelOmni, get_voice_clone_prompt
 except ImportError:
     from OmniVoice.omnivoice_inference.omnivoice_support.ttsOmni_Config import (  # type: ignore
         inferWithModelOmni,
+        get_voice_clone_prompt,
     )
 
 # Thêm thư mục gốc của project vào sys.path để import được module 'general'
@@ -137,8 +139,11 @@ class Omni:
 
     def loadModelOmni(self) -> Any:
         if self.model is None:
-            # Sử dụng BFloat16 trên GPU NVIDIA RTX (Ampere/Ada Lovelace) để tăng tốc vượt trội
-            dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float32
+            # Sử dụng Float16 trên GPU (T4 / V100 / RTX) để tăng tốc vượt trội và tiết kiệm VRAM
+            if torch.cuda.is_available():
+                dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+            else:
+                dtype = torch.float32
             omni_voice_cls = _import_omnivoice_class()
             model = cast(Any, omni_voice_cls.from_pretrained(
                 self.model_path,
@@ -162,6 +167,51 @@ class Omni:
         return self._sampling_rate
 
 
+def split_text_into_chunks(text: str, max_chars: int = 240) -> list[str]:
+    """Gom các câu thành các đoạn đọc hợp lý (mặc định tối đa 240 ký tự).
+    Giữ nguyên ngữ điệu tự nhiên giữa các dấu phẩy, giảm tối đa số lần gọi model."""
+    text = re.sub(r"\s+", " ", (text or "")).strip()
+    if not text:
+        return []
+    if len(text) <= max_chars:
+        return [text]
+
+    # Cắt theo dấu chấm, chấm than, hỏi chấm, chấm lửng hoặc xuống dòng
+    sentences = re.split(r"(?<=[.!?…;\n])\s+", text)
+    chunks: list[str] = []
+    cur = ""
+    for sent in sentences:
+        sent = sent.strip()
+        if not sent:
+            continue
+        candidate = (cur + " " + sent).strip() if cur else sent
+        if len(candidate) <= max_chars:
+            cur = candidate
+        else:
+            if cur:
+                chunks.append(cur)
+                cur = ""
+            if len(sent) <= max_chars:
+                cur = sent
+            else:
+                # Nếu 1 câu quá dài vượt quá max_chars, cắt theo dấu phẩy hoặc từ
+                sub_parts = re.split(r"(?<=[,，:：])\s+", sent)
+                for part in sub_parts:
+                    part = part.strip()
+                    if not part:
+                        continue
+                    c_part = (cur + " " + part).strip() if cur else part
+                    if len(c_part) <= max_chars:
+                        cur = c_part
+                    else:
+                        if cur:
+                            chunks.append(cur)
+                        cur = part
+    if cur:
+        chunks.append(cur)
+    return chunks
+
+
 def generate_speech_omni(
     omni: Omni,
     text: str,
@@ -170,7 +220,10 @@ def generate_speech_omni(
     ref_text: Optional[str] = None,
     speed: float = 1.0,
     pitch_shift: float = 1.0,            # F0 scaling pitch: 0.5~2.0 (1.0=bình thường)
-    progress=None,
+    num_step: int = 16,
+    max_chars: int = 240,
+    progress_callback = None,
+    progress = None,
 ):
     if not (text or "").strip():
         return None, "❌ Please enter some text", None
@@ -183,170 +236,123 @@ def generate_speech_omni(
     # ── Preprocess text ────────────────────────────────────────────────────
     text = clearText(text, language)
 
-    # Segment — tách câu theo dấu câu
-    segments = segment_text(text)
-    if not segments:
-        segments = [{"type": SEGMENT_TEXT, "content": text}]
+    # Gom câu thành các chunk đọc hợp lý
+    chunks = split_text_into_chunks(text, max_chars=max_chars)
+    if not chunks:
+        chunks = [text]
 
-    # Log segments
-    text_segs = [s for s in segments if s["type"] == SEGMENT_TEXT]
-    print(f"📝 Text segmented into {len(segments)} items ({len(text_segs)} spoken chunks):")
+    total_chunks = len(chunks)
+    print(f"\n📝 Text chunked into {total_chunks} blocks (max_chars={max_chars}):", flush=True)
+    for idx, c in enumerate(chunks):
+        print(f"   [{idx+1}/{total_chunks}] 🗣 [{c[:60]}{'…' if len(c)>60 else ''}] ({len(c)} chars)")
 
-    for idx, seg in enumerate(segments):
-        if seg["type"] == SEGMENT_TEXT:
-            print(f"   [{idx+1}] 🗣  [{seg['content']}]")
-        else:
-            print(f"   [{idx+1}] ⏸  '{seg['content']}' → {seg['pause_ms']} ms")
+    # Tạo voice clone prompt 1 LẦN DUY NHẤT để tái sử dụng
+    model = omni.loadModelOmni()
+    voice_clone_prompt = get_voice_clone_prompt(
+        reference_audio=reference_audio,
+        ref_text=ref_text,
+        model=model,
+        preprocess_prompt=True,
+        language=language,
+    )
 
-    # ── Build audio (single-pass: generate + concat in-place) ─────────────
-    result: Optional[np.ndarray] = None   # kết quả tích lũy
-    pending_silence_ms: int      = 0      # khoảng lặng chờ trước segment TEXT tiếp theo
+    result: Optional[np.ndarray] = None
+    arrSrt: list[dict] = []
+    current_time: float = 0.0
 
-    # ── Create SRT file ─────────────────────────────────────────────────────
-    arrSrt: list[dict]      = []  # để làm file SRT, List chứa {startTime, endTime, text}
-    current_time: float      = 0.0  # Thời gian tích lũy (giây)
+    print(f"\n🚩 Bắt đầu inference audio OmniVoice: num_step={num_step}, speed={speed}, pitch={pitch_shift}", flush=True)
 
-# ----------------------------READY FOR INFERENCE TTS--------------------------
-    print(f"\n🚩bắt đầu inference audio với model OmniVoice: speed={speed}, pitch={pitch_shift}", flush=True)
+    pause_between_chunks_ms = 200
+    silence_inter = np.zeros(int(omni.sampling_rate * pause_between_chunks_ms / 1000), dtype=np.float32)
 
-    # Debug: Show speed effect on estimated duration
-    if speed != 1.0:
-        print(f"   📊 Speed {speed} sẽ tạo audio {'ngắn hơn' if speed > 1 else 'dài hơn'} ~{abs(speed-1)*100:.0f}% so với speed=1.0", flush=True)
+    for chunk_idx, chunk in enumerate(chunks):
+        preview = chunk[:50] + ("…" if len(chunk) > 50 else "")
+        if progress_callback:
+            progress_callback(chunk_idx + 1, total_chunks, preview)
+        if progress:
+            progress((chunk_idx) / total_chunks, desc=f"Đang sinh giọng nói - Đoạn {chunk_idx + 1}/{total_chunks}: {preview}")
 
-    total_spoken_segs = len(text_segs)
-    current_spoken_seg = 0
+        print(f"\n===================================================")
+        print(f"  🔊📢 [Chunk {chunk_idx + 1}/{total_chunks}]: {chunk}\n", flush=True)
 
-    for seg in segments:
-        if seg["type"] == SEGMENT_TEXT:
-            current_spoken_seg += 1
-            if progress:
-                progress(0.2 + 0.7 * (current_spoken_seg / total_spoken_segs), desc=f"Đang sinh giọng nói (OmniVoice) - Câu {current_spoken_seg}/{total_spoken_segs}")
+        audios = omni._inferWithModelOmni(
+            text=chunk.strip(),
+            reference_audio=reference_audio,
+            ref_text=ref_text,
+            language=language,
+            speed=speed,
+            num_step=num_step,
+            voice_clone_prompt=voice_clone_prompt,
+        )
 
+        getFirstAudio = audios[0]
+        getFirstAudio = vad_trim(getFirstAudio, omni.sampling_rate, margin_s=0.05)
+        audio_np = fix_silent_and_speed_audio(
+            getFirstAudio, omni.sampling_rate,
+            threshold_ms=50,
+            silence_threshold_db=-45
+        )
 
-            spoken = seg["content"]
+        # Pitch shift post-processing
+        if pitch_shift != 1.0:
+            n_semitones = 12.0 * math.log2(max(0.5, min(2.0, float(pitch_shift))))
+            try:
+                pitch_board = PB([PitchShift(semitones=n_semitones)])
+                audio_2d = audio_np.reshape(1, -1).astype(np.float32)
+                audio_np = pitch_board(audio_2d, omni.sampling_rate).flatten()
+            except Exception as e:
+                print(f"⚠️ pitch_shift (pedalboard) failed: {e}")
 
-            print(f"\n===================================================")
-            print(f"\n  🔊📢🔊 Omni Generating: {spoken}\n", flush=True)
+        chunk_duration = len(audio_np) / omni.sampling_rate
+        if chunk_duration > 0:
+            start_time = current_time
+            end_time = current_time + chunk_duration
 
-            audios = omni._inferWithModelOmni(
-                text=spoken.strip(),
-                reference_audio=reference_audio,
-                ref_text=ref_text,
-                language=language,
-                speed=speed,
-            )
+            arrSrt.append({
+                "startTime": start_time,
+                "endTime": end_time,
+                "text": chunk
+            })
 
-            # audios là list, lấy phần tử đầu tiên
-            getFirstAudio = audios[0]
-
-            # giữ lại speech, bỏ non-speech
-            getFirstAudio = vad_trim(getFirstAudio, omni.sampling_rate, margin_s=0.05)
-            
-            audio_np = fix_silent_and_speed_audio(getFirstAudio, omni.sampling_rate,
-                                                  threshold_ms=50,
-                                                  silence_threshold_db=-45)
-
-            # ── Pitch shift post-processing (Spotify Pedalboard) ──────────────
-            # Dùng Pedalboard PitchShift — chất lượng cao hơn librosa rất nhiều
-            # pitch_shift: 1.0=giữ nguyên, >1.0=giọng cao, <1.0=giọng trầm
-            # Chuyển ratio → semitones: 12 * log2(ratio)
-            if pitch_shift != 1.0:
-                
-                n_semitones = 12.0 * math.log2(max(0.5, min(2.0, float(pitch_shift))))
-                try:
-                    pitch_board = PB([PitchShift(semitones=n_semitones)])
-                    # Pedalboard cần float32 shape (channels, samples)
-                    audio_2d = audio_np.reshape(1, -1).astype(np.float32)
-                    audio_np = pitch_board(audio_2d, omni.sampling_rate).flatten()
-                except Exception as e:
-                    print(f"⚠️ pitch_shift (pedalboard) failed: {e}")                                      
-
-            # [SRT FILE] Tạo timing item cho segment này
-            segment_duration = len(audio_np) / omni.sampling_rate
-
-            if segment_duration > 0:
-
-                # ── Thêm khoảng lặng trước segment này (nếu có dấu câu phía trước) ──
-                # pending_silence_ms được update ở dưới
-                if pending_silence_ms > 0:
-                    silence = np.zeros(int(omni.sampling_rate * pending_silence_ms / 1000), dtype=np.float32)
-                    current_time += pending_silence_ms / 1000.0
-                    pending_silence_ms = 0
-                else:
-                    silence = np.zeros(0, dtype=np.float32)
-
-                start_time = current_time
-                end_time = current_time + segment_duration
-
-                timing_item = {
-                    "startTime": start_time,
-                    "endTime": end_time,
-                    "text": spoken
-                }
-                arrSrt.append(timing_item)
-
-                # [SRT FILE] Cập nhật current_time cho segment tiếp theo
-                current_time = end_time
-
-                print(f"  🎵 Audio generated: {len(audio_np)} samples | {start_time:.3f}s - {end_time:.3f}s", flush=True)
-
-                # ── Ráp ngay vào result ────────────────────────────────────────
-                piece = audio_np.astype(np.float32)
-                if result is None:
-                    result = np.concatenate([silence, piece]) if len(silence) > 0 else piece
-                else:
-                    result = np.concatenate([result, silence, piece])
-                print(f"🔗 Concatenated: result len={len(result)}", flush=True)
-
+            piece = audio_np.astype(np.float32)
+            if result is None:
+                result = piece
             else:
-                print(f"⚠️ Không tạo được âm thanh cho: {spoken}")
+                result = np.concatenate([result, silence_inter, piece])
+                current_time += (pause_between_chunks_ms / 1000.0)
 
-            # ---------------------đảm bảo CUDA ops xong hết-------------------------
-            if torch.cuda.is_available():
-                torch.cuda.synchronize()   # đảm bảo CUDA ops xong hết
-            # Không gọi empty_cache() ở đây để tránh phân mảnh VRAM và giảm tốc độ
-        else:
-            # Tích lũy khoảng lặng từ dấu câu, sẽ được thêm vào trước segment TEXT tiếp theo
-            pending_silence_ms += seg['pause_ms']
+            current_time += chunk_duration
+            print(f"  🎵 Audio chunk generated: {chunk_duration:.2f}s | timeline {start_time:.2f}s - {end_time:.2f}s", flush=True)
 
-    # --------------------------------kiểm tra kết quả ----------------------------------------
+        # Đồng bộ CUDA và dọn dẹp bộ nhớ sau mỗi chunk để tránh OOM / sập Kernel Colab
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+            torch.cuda.empty_cache()
+        gc.collect()
+
     if result is None:
         return None, "❌ Không tạo được âm thanh từ text", None
 
-    # KHÔNG SỬ DỤNG 'fix_silent_and_speed_audio'. 
-    # vì user nhập dấu câu thế nào thì khoảng lặng giữa các câu giữ nguyên như config
-   
-
-    # BẮT BUỘC CUỐI CÂU PHẢI CÓ KHOẢNG LẶNG NGẮN
-    trailing_silence_ms: int  = 250  # thêm silence đuôi để tránh hai câu sát quá, đọc như đọc rap
-
-    trailing_samples = int(trailing_silence_ms / 1000.0 * omni.sampling_rate)
-    if trailing_samples > 0:
-        if result.ndim == 1:
-            silence = np.zeros(trailing_samples, dtype=result.dtype)
-        else:
-            # shape: (samples, channels) hoặc (channels, samples)
-            silence = np.zeros((trailing_samples, result.shape[1]), dtype=result.dtype)
-        result = np.concatenate([result, silence], axis=0)
+    # Khoảng lặng đuôi 250ms
+    trailing_samples = int(0.25 * omni.sampling_rate)
+    silence_end = np.zeros(trailing_samples, dtype=np.float32)
+    result = np.concatenate([result, silence_end])
 
     duration = len(result) / omni.sampling_rate
-    status = f"✅ Generated (Omni)! | {duration:.2f}s | {language.upper()}"
+    status = f"✅ Hoàn thành! | {duration:.2f}s | {language.upper()} ({total_chunks} đoạn)"
 
-    # [SRT FILE] Tạo file SRT trong temp directory để Gradio có thể trả về
-    
     gradio_temp = os.environ.get("GRADIO_TEMP_DIR", tempfile.gettempdir())
     srt_temp_path = os.path.join(gradio_temp, f"omni_srt_{hash(text) % 1000000}.srt")
     create_srt_file(arrSrt, srt_temp_path)
 
     print(f"✅ Created SRT file: {srt_temp_path}", flush=True)
+    print(f"✅ Done inference OmniVoice | duration={duration:.2f}s | total_chunks={total_chunks}\n", flush=True)
 
-    print(f"\n✅ done, đã inference xong với OmniVoice và tạo file SRT | duration={duration:.2f}s\n", flush=True)
-    print(f"===========================================================================================================")
-    print(f"===========================================================================================================\n\n\n")
-
-    # Dọn dẹp VRAM một lần duy nhất sau khi hoàn thành toàn bộ text
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
     gc.collect()
+
+    if progress:
+        progress(1.0, desc="Hoàn thành!")
 
     return (omni.sampling_rate, result), status, srt_temp_path

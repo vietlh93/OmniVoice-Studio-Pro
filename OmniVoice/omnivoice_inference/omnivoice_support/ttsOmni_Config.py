@@ -191,6 +191,8 @@ def inferWithModelOmni(
     ref_text: Optional[str] = None,  # Thêm transcript của giọng mẫu để clone chính xác hơn
     language: Optional[str] = "vi",
     speed: float = 1.0,
+    num_step: Optional[int] = None,
+    voice_clone_prompt: Optional[Any] = None,
    # duration: Optional[float] = None,  # Thêm để kiểm soát tốc độ đọc cố định
 ):
 # HẠN CHẾ FIX CHỖ NÀY, VÌ DEV ĐÃ FIX SAO CHO ÂM THANH ĐẦU RA LÀ CHÍNH XÁC NHẤT - ƯU TIÊN ĐỘ CHÍNH XÁC
@@ -224,9 +226,9 @@ def inferWithModelOmni(
     # Chỉnh các tham số cho 'class OmniVoiceGenerationConfig' bên trong thư viện.
     # Chỉ chỉnh sửa ở đây, không động vào bên trong thư viện.
 
-    # num_step: ưu tiên ĐỘ CHÍNH XÁC -> nên tăng vừa phải.
-    # Tăng: thường chính xác và mượt hơn (đổi lại chậm hơn). Giảm: nhanh hơn nhưng dễ sai âm/nuốt âm.
-    num_step: Optional[int] = 32  # tối thiểu: 8, tối đa: 64 | khuyến nghị chính xác: 48-64
+    # num_step: mặc định 16 bước để tốc độ tối ưu và giữ chất lượng âm thanh cao
+    if num_step is None:
+        num_step = 16
 
     # guidance_scale: độ bám text/ref.
     # Tăng quá cao: có thể bị "gắt", méo tự nhiên; giảm quá thấp: dễ lệch nội dung. Muốn chính xác: dùng mức trung-cao.
@@ -270,13 +272,14 @@ def inferWithModelOmni(
     model: OmniVoice = self.loadModelOmni()  # type: ignore[assignment]
     # torch.compile + CUDA optimizations đã được chuyển vào loadModelOmni() — chỉ chạy 1 lần duy nhất khi load model
 
-    voice_clone_prompt = get_voice_clone_prompt(
-        reference_audio=reference_audio,
-        ref_text=ref_text,
-        model=model,
-        preprocess_prompt=preprocess_prompt,
-        language=language,
-    )
+    if voice_clone_prompt is None:
+        voice_clone_prompt = get_voice_clone_prompt(
+            reference_audio=reference_audio,
+            ref_text=ref_text,
+            model=model,
+            preprocess_prompt=preprocess_prompt,
+            language=language,
+        )
 
     generate_kwargs = {
         "text": text,

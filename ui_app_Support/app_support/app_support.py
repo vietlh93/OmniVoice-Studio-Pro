@@ -424,4 +424,81 @@ input[type="range"] {
     padding: 1.25rem !important;
     margin-top: 1rem !important;
 }
+
+/* Dynamic Progress Status Card */
+.studio-status-card {
+    border-radius: 0.85rem;
+    padding: 1rem 1.25rem;
+    border: 1px solid #1e293b;
+    background: #0f172a;
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+.studio-status-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.95rem;
+    color: #f8fafc;
+}
+.studio-status-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    margin-right: 8px;
+    font-weight: 800;
+    font-size: 0.85rem;
+    background: #1e293b;
+}
+.studio-pct {
+    font-size: 0.9rem;
+    font-weight: 800;
+    color: #38bdf8;
+}
+.studio-progress-track {
+    height: 8px;
+    background: #1e293b;
+    border-radius: 9999px;
+    overflow: hidden;
+    margin: 9px 0 8px;
+}
+.studio-progress-fill {
+    height: 100%;
+    border-radius: 9999px;
+    background: linear-gradient(90deg, #6366f1, #06b6d4, #10b981);
+    transition: width 0.4s ease;
+}
+.studio-status-detail {
+    font-size: 0.82rem;
+    color: #94a3b8;
+    line-height: 1.45;
+}
+.studio-status-ready {
+    background: rgba(16, 185, 129, 0.08);
+    border-color: rgba(16, 185, 129, 0.3);
+}
+.studio-status-ready .studio-status-icon {
+    background: rgba(16, 185, 129, 0.2);
+    color: #34d399;
+}
+.studio-status-running {
+    background: rgba(99, 102, 241, 0.08);
+    border-color: rgba(99, 102, 241, 0.3);
+}
+.studio-status-running .studio-status-icon {
+    background: rgba(99, 102, 241, 0.2);
+    color: #818cf8;
+}
+.studio-status-error {
+    background: rgba(239, 68, 68, 0.08);
+    border-color: rgba(239, 68, 68, 0.3);
+}
+.studio-status-error .studio-status-icon {
+    background: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+}
 """
