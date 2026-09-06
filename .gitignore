@@ -1,3 +1,13 @@
-﻿viterbox/modelViterboxLocal
 OmniVoice/model_ASR_chunkformer_local
 OmniVoice/model_higgs_audio_v2_tokenizer_local
+OmniVoice/modelOmniLocal
+venv/
+build/
+dist/
+__pycache__/
+*.pyc
+.vscode/
+general/__pycache__/
+general/silero_vad_model_local/__pycache__/
+ui_app_Support/app_support/__pycache__/
+OmniVoice/**/__pycache__/

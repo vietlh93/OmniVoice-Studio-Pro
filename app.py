@@ -1,33 +1,23 @@
 """
-Viterbox - Gradio Web Interface
+OmniVoice Studio Pro - Gradio Web Interface
 """
-# Set HF Hub env vars BEFORE importing transformers to disable warnings
 import os
+import warnings
 
-# Disable telemetry: Prevent Hugging Face from sending usage statistics/analytics
-# Điều này tránh các request ngầm đến HF Hub để báo cáo dữ liệu sử dụng
-os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
-
-# Force offline mode: Không gọi API đến HF Hub, chỉ dùng model local
-# Điều này tránh warning "unauthenticated requests" vì không còn request nào được gửi đi
-os.environ["HF_HUB_OFFLINE"] = "1"
-
-# Set dummy token để tránh warning "unauthenticated requests"
-# Vì đang ở offline mode, token này sẽ không được sử dụng cho bất kỳ request nào
-# nhưng sẽ làm hài lòng auth check của huggingface_hub
-os.environ["HF_TOKEN"] = "dummy"
-
-# Disable symlink warning: Tránh warning về việc Windows không hỗ trợ symlinks tốt
-# (thường xuất hiện khi HF Hub cố tạo symlink cho cache files)
+# Tắt cảnh báo không cần thiết từ thư viện (PyTorch, Transformers, Gradio, TF)
+warnings.filterwarnings('ignore')
+os.environ["PYTHONWARNINGS"] = "ignore"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+os.environ["GRADIO_ANALYTICS_ENABLED"] = "False"
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 
 import torch
-import warnings
 import gradio as gr
 
-warnings.filterwarnings('ignore')
-
 import tempfile
+from pathlib import Path
+from typing import cast
+from gradio.components.textbox import InputHTMLAttributes
 
 os.environ["GRADIO_TEMP_DIR"] = tempfile.gettempdir() + "/my_gradio_tmp"
 os.makedirs(os.environ["GRADIO_TEMP_DIR"], exist_ok=True)
@@ -45,27 +35,13 @@ try:
                 elif os.path.isdir(item_path):
                     shutil.rmtree(item_path)
             except Exception:
-                pass  # Bỏ qua file đang bị lock
+                pass
 except Exception:
-    pass  # Không crash app nếu có lỗi
+    pass
 
-from pathlib import Path
-from typing import cast
-from gradio.components.textbox import InputHTMLAttributes
 from OmniVoice.omnivoice_inference.ttsOmni import generate_speech_omni
-from general.EQ_emotion_config.eq_emotional_profiles import list_emotional_profiles, get_profile_description
-from viterbox.pretrain_voice_builder import build_voice_profile, copy_profile_to_model, PRETRAINED_DIR, OUTPUT_DIR, MODEL_DIR
-from viterbox.tts_generate_speech import generate_speech_viterbox
-from ui_app_Support.app_ui.app_ui_viterbox_tts import (
-    viterbox_UI_advance_AI_config,
-    viterbox_bind_advanced_ai_config_actions,
-    viterbox_UI_build_voice_profile,
-    viterbox_bind_voice_profile_actions,
-)
 from ui_app_Support.app_support.app_model_management import (
     configure_device,
-    ensure_active_model,
-    get_model_viterbox,
     get_omni_model,
 )
 from ui_app_Support.app_support.app_support import (
@@ -73,7 +49,6 @@ from ui_app_Support.app_support.app_support import (
     list_voices, get_default_voice, get_wavs_dir,
     save_path, load_path,
     save_generated_audio_and_srt,
-    run_build_voice_profile, run_copy_profile_to_model,
 )
 
 if torch.cuda.is_available():
@@ -86,14 +61,20 @@ print(f"Device: {DEVICE}")
 
 configure_device(DEVICE)
 
-# ── Wrapper functions (inject MODEL + dirs into app_support functions) ─────────
-
-def _run_build_voice_profile(exaggeration_val):
-    model = get_model_viterbox()
-    return run_build_voice_profile(model, PRETRAINED_DIR, OUTPUT_DIR, build_voice_profile, exaggeration_val)
-
-def _run_copy_profile_to_model():
-    return run_copy_profile_to_model(OUTPUT_DIR, MODEL_DIR, copy_profile_to_model)
+def browse_folder(current_val):
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        root.wm_attributes('-topmost', 1)
+        initial = current_val if current_val and os.path.exists(current_val) else os.getcwd()
+        selected_dir = filedialog.askdirectory(parent=root, initialdir=initial, title="Chọn thư mục lưu file")
+        root.destroy()
+        return selected_dir if selected_dir else current_val
+    except Exception as e:
+        print(f"[browse_folder] Không có giao diện đồ họa GUI (headless/Colab): {e}")
+        return current_val
 
 # Thuộc tính HTML gắn trực tiếp lên ô nhập (Gradio ≥ 4) — tắt spellcheck trình duyệt cho tiếng Việt.
 TTS_TEXT_HTML_ATTRS = cast(
@@ -107,321 +88,233 @@ TTS_TEXT_HTML_ATTRS = cast(
     },
 )
 
-
-def _update_model_emotion_controls(profile):
-    is_custom = profile == "AI-custom"
-    return (
-        gr.update(interactive=is_custom),
-        gr.update(interactive=is_custom),
-        gr.update(interactive=is_custom),
-        gr.update(interactive=is_custom),
-        gr.update(interactive=is_custom),
-    )
-
-
 # ── Build UI ───────────────────────────────────────────────────────────────────
 with gr.Blocks(
-    title="🎙️ Viterbox TTS",
+    title="🎙️ OmniVoice Studio Pro - AI Voice Cloning",
     theme=gr.themes.Soft(primary_hue="indigo", secondary_hue="slate", neutral_hue="slate"),
     css=CSS,
     js=APP_INIT_JS
 ) as demo:
 
-    gr.HTML("""
-        <div style="text-align: center; margin-bottom: 0.5rem;">
-            <h1 style="margin: 0; color: #6b7280; font-size: 2rem;">🎙️ Betterbox TTS</h1>
-            <p style="color: #6b7280; margin-top: 0.5rem;">Based on app Viterbox TTS</p>
+    gr.HTML(f"""
+        <div class="studio-header-card" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+            <div>
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span style="font-size: 2.2rem;">🎙️</span>
+                    <h1 class="studio-title-text" style="display: inline-block;">OMNIVOICE STUDIO</h1>
+                    <span style="font-size: 0.75rem; font-weight: 800; background: linear-gradient(135deg, #6366f1, #06b6d4); color: white; padding: 3px 9px; border-radius: 6px; letter-spacing: 0.05em;">PRO</span>
+                </div>
+                <p style="color: #94a3b8; margin: 0.4rem 0 0 0; font-size: 0.88rem; font-weight: 500;">
+                    High-Performance Neural Text-to-Speech & Voice Cloning Workstation
+                </p>
+            </div>
+            <div style="display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center;">
+                <span class="studio-pill"><span class="pulse-dot-green"></span> Engine: {DEVICE.upper()} (OmniVoice)</span>
+                <span class="studio-pill">⚡ FlashAttention-2 + TF32 + BF16</span>
+                <span class="studio-pill">🔊 24kHz HD Audio</span>
+            </div>
         </div>
     """)
 
-    gr.HTML('<div style="text-align: center; margin-bottom: 1rem;"><span class="status-badge">🎯 Fine-tuned Model</span></div>')
-
-    with gr.Row(equal_height=True, elem_id="main-row"):
-        # Left - Text Input
+    with gr.Row(equal_height=False, elem_id="main-row"):
+        # Left Column: Voice & Audio Settings Deck
         with gr.Column(scale=1, elem_classes=["card"]):
-            gr.HTML('<div class="section-title">📝 Text Input</div>')
+            gr.HTML('<div class="studio-section-title">🎤 1. Reference Voice Selection</div>')
 
-            language = gr.Radio(
-                choices=[("🇻🇳 Tiếng Việt", "vi"), ("🇺🇸 English", "en")],
-                value="vi", label="Language"
-            )
-
-            text_input = gr.Textbox(
-                label="Text to Synthesize",
-                placeholder="Nhập văn bản cần đọc...",
-                lines=5,
-                elem_id="main-text-input",
-                html_attributes=TTS_TEXT_HTML_ATTRS,
-            )
-
-            with gr.Row():
-                clear_btn = gr.Button("🗑️ Clear", variant="secondary", size="sm")
-
-            # ── Voice Profile Builder for viterbox tts ─────────────────────────────────────
-            with gr.Column(visible=False) as viterbox_profile_container:
-                (
-                    build_profile_btn,
-                    copy_profile_btn,
-                    build_profile_output,
-                ) = viterbox_UI_build_voice_profile()
-
-            # nhập thứ tự audio để save
-            with gr.Row():
-                model_choice = gr.Radio(
-                    choices=[("Viterbox", "viterbox"), ("Omni", "omni")],
-                    value="omni",
-                    label="Model",
-                    info="Chọn model để inference",
-                )
-
-        # Right - Voice & Settings
-        with gr.Column(scale=1, elem_classes=["card"]):
-            gr.HTML('<div class="section-title">🎤 Reference Voice</div>')
-            gr.HTML('''<div style="background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%); border-left: 4px solid #4fc3f7; border-radius: 8px; padding: 12px 16px; margin: 8px 0; font-size: 13px; color: #ffffff; line-height: 1.5;">
-                <span style="color: #4fc3f7; font-weight: bold;">💡 Tip:</span> Để OmniVoice cho kết quả chính xác nhất, hãy đặt file <code style="background: rgba(255,255,255,0.15); padding: 2px 6px; border-radius: 4px; color: #ffffff;">.wav</code> và <code style="background: rgba(255,255,255,0.15); padding: 2px 6px; border-radius: 4px; color: #fff;">.txt</code> cùng tên trong folder wavs/, nếu không có file text kèm theo, app sẽ sử dung thêm model chunkformer để lấy text từ audio đầu vào -> VRAM sẽ tăng thêm từ 1-2GB
+            gr.HTML('''<div class="studio-tip-banner">
+                <span style="color: #38bdf8; font-weight: 700;">💡 Studio Tip:</span> Để OmniVoice nhân bản chính xác nhất, đặt file <code style="background: rgba(255,255,255,0.12); padding: 1px 5px; border-radius: 4px;">.wav</code> và <code style="background: rgba(255,255,255,0.12); padding: 1px 5px; border-radius: 4px;">.txt</code> cùng tên vào thư mục <code style="background: rgba(255,255,255,0.12); padding: 1px 5px; border-radius: 4px;">wavs/</code>.
             </div>''')      
+            
             wav_files = list_voices()
             default_voice = get_default_voice(wav_files)
             if wav_files:
                 ref_dropdown = gr.Dropdown(
                     choices=[(Path(f).stem, f) for f in wav_files],
-                    label="Select Voice",
+                    label="Select Reference Voice",
                     value=default_voice,
                 )
             else:
                 ref_dropdown = gr.Dropdown(choices=[], label="No voices in wavs/")
 
             ref_audio = gr.Audio(
-                label="Or Upload/Record",
+                label="Or Upload / Record Reference Audio",
                 type="filepath",
                 value=default_voice,
                 sources=["upload", "microphone"],
             )
 
-            # ---Setting -----------------------------------------------
-            with gr.Accordion("⚙️ Settings", open=False):
-                with gr.Column(elem_classes=["card"]):
+            gr.HTML('<div class="studio-section-title" style="margin-top: 1.25rem;">🎨 2. Vocal Performance Tuning</div>')
 
-                    # Emotional Audio Selection
-                    with gr.Row():
-                        emotional_choices = [
-                            ("no_eq_processing")
-                        ]
-                        for profile in list_emotional_profiles():
-                            description = get_profile_description(profile)
-                            emotional_choices.append((description, profile))
+            language = gr.Radio(
+                choices=[("🇻🇳 Tiếng Việt", "vi"), ("🇺🇸 English", "en")],
+                value="vi", label="Language"
+            )
 
-                        emotional_profile = gr.Dropdown(
-                            choices=emotional_choices,
-                            value="no_eq_processing",
-                            label="🎭 Emotional Audio - EQ for output audio",
-                            info="Chọn cảm xúc cho giọng nói (No Processing = audio gốc, không qua xử lý)",
-                        )
+            with gr.Row():
+                ai_speed = gr.Slider(
+                    minimum=0.7,
+                    maximum=1.5,
+                    step=0.05,
+                    value=1.0,
+                    label="🏎️ Speech Speed",
+                    info="Tốc độ nói. 1.0=Chuẩn, >1.0=Nhanh, <1.0=Chậm.",
+                )
+                ui_pitch_shift = gr.Slider(
+                    minimum=0.5,
+                    maximum=2.0,
+                    step=0.05,
+                    value=1.0,
+                    label="🎵 Pitch Shift",
+                    info="Cao độ giọng. 1.0=Chuẩn, >1=Trầm, <1=Bổng.",
+                )
 
-                    with gr.Row():
-                        ui_pitch_shift = gr.Slider(
-                            minimum=0.5,
-                            maximum=2.0,
-                            step=0.05,
-                            value=1.0,
-                            label="🎵 Pitch Shift - for output audio",
-                            info="Cao độ giọng nói. 1.0=bình thường, >1=giọng cao, <1=giọng trầm. Không đổi tốc độ.",
-                        )
+            gr.HTML('<div class="studio-section-title" style="margin-top: 1.25rem;">📂 3. Export Directory Configuration</div>')
+            with gr.Row():
+                folder_input = gr.Textbox(
+                    label="Download Folder Path",
+                    placeholder="Nhập đường dẫn thư mục lưu...",
+                    value=load_path(),
+                    scale=3
+                )
+                browse_btn = gr.Button("📂 Browse", scale=1, elem_classes=["studio-btn-secondary"])
+                save_btn = gr.Button("💾 Save Path", scale=1, elem_classes=["studio-btn-secondary"])
 
-                    with gr.Row():
-                        ai_speed = gr.Slider(
-                            minimum=0.7,
-                            maximum=1.5,
-                            step=0.05,
-                            value=1.0,
-                            label="🏎️ AI Speed (Mel Interpolation) - for AI input",
-                            info="Tốc độ giọng nói từ model AI. 1.0=bình thường, >1=nhanh, <1=chậm. Giữ nguyên pitch.",
-                        )
-
-                    # ── Advanced AI Parameters for viterbox tts ─────────────────────────────────────
-                    with gr.Column(visible=False) as viterbox_adv_config_container:
-                        (
-                            model_emotion,
-                            tts_mode,
-                            exaggeration,
-                            ui_cfg_weight,
-                            ui_temperature,
-                            ui_top_p,
-                            ui_repetition_penalty,
-                        ) = viterbox_UI_advance_AI_config()
-
-    # Toggle Viterbox UI based on model selection
-    def toggle_viterbox_ui(choice):
-        is_viterbox = (choice == "viterbox")
-        return gr.update(visible=is_viterbox), gr.update(visible=is_viterbox)
-
-    model_choice.change(
-        fn=toggle_viterbox_ui,
-        inputs=[model_choice],
-        outputs=[viterbox_profile_container, viterbox_adv_config_container]
-    )
-
-    # Save download folder
-    with gr.Row():
-        # value=load_path() giúp tự động hiện lại nội dung cũ khi mở App
-        folder_input = gr.Textbox(
-            label="Download Folder Path",
-            placeholder="Nhập đường dẫn lưu file...",
-            value=load_path(),
-            scale=4
-        )
-        save_btn = gr.Button("💾 Save Path", scale=1)
-
-
-    # Generate button
-    generate_btn = gr.Button("🔊 Generate Speech + SRT audio", variant="primary", size="lg", elem_classes=["generate-btn"])
-
-    # Output
-    with gr.Column(elem_classes=["output-card"]):
-        gr.HTML('<div class="section-title">🔈 Output</div>')
-        with gr.Row():
-            output_audio = gr.Audio(label="Generated Speech", type="numpy", scale=2, interactive=False)
-            status_text = gr.Textbox(label="Status", lines=2, scale=1)
-    with gr.Row():
-        save_audio_btn = gr.Button("💾 Lưu audio + SRT về máy", variant="secondary")
-
+        # Right Column: Script Editor & Studio Deck
         with gr.Column(scale=1, elem_classes=["card"]):
-            saved_file = gr.File(label="File đã lưu", interactive=False)
-            srt_file = gr.File(label="SRT File", interactive=False, visible=True)
+            gr.HTML('<div class="studio-section-title">📝 4. Studio Script Editor</div>')
+
+            text_input = gr.Textbox(
+                label="Text Script to Synthesize",
+                placeholder="Nhập văn bản Kịch bản / Lời thoại cần đọc tại đây...",
+                lines=7,
+                elem_id="main-text-input",
+                html_attributes=TTS_TEXT_HTML_ATTRS,
+            )
+
+            with gr.Row():
+                clear_btn = gr.Button("🗑️ Clear Script", variant="secondary", size="sm", elem_classes=["studio-btn-secondary"])
+                sample1_btn = gr.Button("✨ Sample 1 (Giới Thiệu)", variant="secondary", size="sm", elem_classes=["studio-btn-secondary"])
+                sample2_btn = gr.Button("✨ Sample 2 (Truyện Kể)", variant="secondary", size="sm", elem_classes=["studio-btn-secondary"])
+
+            gr.HTML('<div class="studio-section-title" style="margin-top: 1.25rem;">🚀 5. Neural Synthesis Execution</div>')
+
+            with gr.Row():
+                generate_btn = gr.Button("⚡ SYNTHESIZE SPEECH + SRT", variant="primary", size="lg", elem_classes=["generate-btn"])
+                generate_speech_only_btn = gr.Button("🔊 SYNTHESIZE SPEECH ONLY", variant="secondary", size="lg", elem_classes=["studio-btn-secondary"])
+
+            gr.HTML('<div class="studio-section-title" style="margin-top: 1.25rem;">🔈 6. Studio Audio Deck</div>')
+
+            with gr.Row():
+                output_audio = gr.Audio(label="Generated Speech Waveform", type="numpy", scale=2, interactive=False)
+                status_text = gr.Textbox(label="Telemetry Status Console", lines=3, scale=1, elem_classes=["status-console"])
+
+            save_audio_btn = gr.Button("💾 Save Audio & Subtitle Files to Target Directory", variant="secondary", elem_classes=["studio-btn-secondary"])
+
+            with gr.Row():
+                saved_file = gr.File(label="Saved Audio File (.WAV)", interactive=False)
+                srt_file = gr.File(label="Subtitle File (.SRT)", interactive=False, visible=True)
 
     clear_btn.click(fn=lambda: "", outputs=[text_input])
-    ref_dropdown.change(fn=lambda x: gr.update(value=x), inputs=[ref_dropdown], outputs=[ref_audio])
-    # Khi bấm X ở audio, reset dropdown để lần chọn lại cùng file vẫn trigger update.
-    ref_audio.clear(fn=lambda: None, outputs=[ref_dropdown])
-
-    def generate_speech_fn(data):
-        mc = data[model_choice]
-        try:
-            switched = ensure_active_model(mc)
-        except Exception as e:
-            return None, f"❌ Model switch error: {str(e)}"
-
-        if mc == "omni":
-            # inference với model omni - chỉ dùng các tham số cần thiết cho Omni
-            try:
-                omni_model = get_omni_model()
-            except Exception as e:
-                import traceback
-                traceback.print_exc()
-                return None, f"❌ Omni load error: {str(e)}"
-
-            # Lấy ref_text và đường dẫn gốc từ folder wavs/ (thay vì dùng temp file của Gradio)
-            ref_audio_temp_path = data[ref_audio]
-
-            # Lấy tên file (không extension) từ đường dẫn temp của Gradio
-            audio_filename = Path(ref_audio_temp_path).stem
-
-            # Tìm file gốc trong folder wavs/
-            wavs_dir = get_wavs_dir()
-            ref_audio_path = wavs_dir / f"{audio_filename}.wav"
-            ref_text_path = wavs_dir / f"{audio_filename}.txt"
-
-            # Kiểm tra file gốc có tồn tại không
-            if not ref_audio_path.exists():
-                # Fallback: dùng temp path nếu không tìm thấy trong wavs/
-                ref_audio_path = Path(ref_audio_temp_path)
-
-            # Lấy ref_text
-            ref_text = None
-            if ref_text_path.exists():
-                try:
-                    with open(ref_text_path, "r", encoding="utf-8") as f:
-                        ref_text = f.read().strip()
-                except Exception:
-                    ref_text = None
-
-            #print(f"\n📁 wavs_dir: {wavs_dir}")
-            print(f"📝 ref_text_path: {ref_text_path}")
-            print(f"🎵 audio path (temp): {ref_audio_temp_path}")
-            print(f"🎵 audio path (wavs): {ref_audio_path}")
-            print(f"📄 ref_text: {'Found' if ref_text else 'None'}\n")
-
-            audio_out, status, srtFileResult = generate_speech_omni(
-                omni=omni_model,
-                text=data[text_input],
-                language=data[language],
-                reference_audio=str(ref_audio_path),
-                ref_text=ref_text,
-                speed=data[ai_speed],
-                pitch_shift=data[ui_pitch_shift],
-            )
-            if switched and status:
-                status = f"🔁 Switched to Omni | {status}"
-            return audio_out, status, srtFileResult
-        else:
-            # inference với model viterbox - dùng các tham số chi tiết cho Viterbox
-            try:
-                model = get_model_viterbox()
-            except Exception as e:
-                import traceback
-                traceback.print_exc()
-                return None, f"❌ Viterbox load error: {str(e)}"
-
-            audio_out, status, srtFileResult = generate_speech_viterbox(
-                MODEL=model, 
-                text=data[text_input], 
-                language=data[language], 
-                reference_audio=data[ref_audio], 
-                tts_mode=data[tts_mode],
-                emotional_profile=data[emotional_profile], 
-                ui_exaggeration=data[exaggeration], 
-                model_emotion_profile=data[model_emotion],
-                ai_speed=data[ai_speed], 
-                ui_cfg_weight=data[ui_cfg_weight], 
-                ui_temperature=data[ui_temperature], 
-                ui_top_p=data[ui_top_p], 
-                ui_repetition_penalty=data[ui_repetition_penalty], 
-                ui_pitch_shift=data[ui_pitch_shift],
-            )
-            if switched and status:
-                status = f"🔁 Switched to Viterbox | {status}"
-
-            return audio_out, status, srtFileResult
-
-    viterbox_bind_advanced_ai_config_actions(
-        demo=demo,
-        model_emotion=model_emotion,
-        exaggeration=exaggeration,
-        ui_cfg_weight=ui_cfg_weight,
-        ui_temperature=ui_temperature,
-        ui_top_p=ui_top_p,
-        ui_repetition_penalty=ui_repetition_penalty,
-        update_model_emotion_controls_fn=_update_model_emotion_controls,
+    sample1_btn.click(
+        fn=lambda: "Chào mừng bạn đến với OmniVoice Studio Pro. Hệ thống nhân bản giọng nói AI thế hệ mới giúp bạn tạo ra những bản thu âm tự nhiên, truyền cảm và chuyên nghiệp nhất.",
+        outputs=[text_input]
+    )
+    sample2_btn.click(
+        fn=lambda: "Hôm nay thời tiết thật là đẹp, trời xanh mây trắng rất thích hợp để ra ngoài dạo chơi và thưởng thức một tách cà phê thơm ngon cùng bạn bè.",
+        outputs=[text_input]
     )
 
-    # Define separate input sets for each model for better maintainability
-    inputs_omni = {
-        model_choice, text_input, language, ref_audio, ai_speed, ui_pitch_shift
-    }
-    inputs_viterbox = {
-        model_choice, text_input, language, ref_audio, tts_mode,
-        emotional_profile, exaggeration, model_emotion,
-        ai_speed, ui_pitch_shift, ui_cfg_weight, ui_temperature, ui_top_p, ui_repetition_penalty
+    ref_dropdown.change(fn=lambda x: gr.update(value=x), inputs=[ref_dropdown], outputs=[ref_audio])
+    ref_audio.clear(fn=lambda: None, outputs=[ref_dropdown])
+
+    def _generate_core(data, progress=None):
+        try:
+            omni_model = get_omni_model()
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return None, f"❌ Omni load error: {str(e)}"
+
+        ref_audio_temp_path = data[ref_audio]
+        audio_filename = Path(ref_audio_temp_path).stem
+
+        wavs_dir = get_wavs_dir()
+        ref_audio_path = wavs_dir / f"{audio_filename}.wav"
+        ref_text_path = wavs_dir / f"{audio_filename}.txt"
+
+        if not ref_audio_path.exists():
+            ref_audio_path = Path(ref_audio_temp_path)
+
+        ref_text = None
+        if ref_text_path.exists():
+            try:
+                with open(ref_text_path, "r", encoding="utf-8") as f:
+                    ref_text = f.read().strip()
+            except Exception:
+                ref_text = None
+
+        audio_out, status, srtFileResult = generate_speech_omni(
+            omni=omni_model,
+            text=data[text_input],
+            language=data[language],
+            reference_audio=str(ref_audio_path),
+            ref_text=ref_text,
+            speed=data[ai_speed],
+            pitch_shift=data[ui_pitch_shift],
+            progress=progress,
+        )
+        return audio_out, status, srtFileResult
+
+    def generate_speech_and_srt_fn(data, progress=gr.Progress()):
+        progress(0.0, desc="Khởi tạo mô hình OmniVoice và tải giọng nói mẫu...")
+        audio_out, status, srt_path = _generate_core(data, progress=progress)
+        if audio_out is None:
+            return None, status, None, None
+        
+        progress(0.9, desc="Đang tự động lưu file âm thanh và phụ đề SRT...")
+        folder_path = data[folder_input]
+        text = data[text_input]
+        save_status, saved_audio_path = save_generated_audio_and_srt(
+            audio_out, text, folder_path, srt_path
+        )
+        status = f"{status}\n{save_status}"
+        progress(1.0, desc="Hoàn thành!")
+        return audio_out, status, srt_path, saved_audio_path
+
+    def generate_speech_only_fn(data, progress=gr.Progress()):
+        progress(0.0, desc="Khởi tạo mô hình OmniVoice và tải giọng nói mẫu...")
+        audio_out, status, srt_path = _generate_core(data, progress=progress)
+        if audio_out is None:
+            return None, status, None, None
+        
+        progress(0.9, desc="Đang tự động lưu file âm thanh...")
+        folder_path = data[folder_input]
+        text = data[text_input]
+        save_status, saved_audio_path = save_generated_audio_and_srt(
+            audio_out, text, folder_path, None
+        )
+        status = f"{status}\n{save_status}"
+        progress(1.0, desc="Hoàn thành!")
+        return audio_out, status, None, saved_audio_path
+
+    all_inputs = {
+        text_input, language, ref_audio, ai_speed, ui_pitch_shift, folder_input
     }
 
     generate_btn.click(
-        fn=generate_speech_fn,
-        inputs=inputs_omni | inputs_viterbox,  # Union of all necessary components
-        outputs=[output_audio, status_text, srt_file]
+        fn=generate_speech_and_srt_fn,
+        inputs=all_inputs,
+        outputs=[output_audio, status_text, srt_file, saved_file]
     )
 
-    # Thiết lập sự kiện khi bấm nút Save
+    generate_speech_only_btn.click(
+        fn=generate_speech_only_fn,
+        inputs=all_inputs,
+        outputs=[output_audio, status_text, srt_file, saved_file]
+    )
+
+    browse_btn.click(fn=browse_folder, inputs=folder_input, outputs=folder_input)
     save_btn.click(fn=save_path, inputs=folder_input, outputs=status_text)
-
-    # Voice Profile Builder
-    viterbox_bind_voice_profile_actions(
-        build_profile_btn=build_profile_btn,
-        copy_profile_btn=copy_profile_btn,
-        build_profile_output=build_profile_output,
-        exaggeration=exaggeration,
-        run_build_voice_profile_fn=_run_build_voice_profile,
-        run_copy_profile_to_model_fn=_run_copy_profile_to_model,
-    )
 
     save_audio_btn.click(
         fn=save_generated_audio_and_srt,
@@ -429,6 +322,26 @@ with gr.Blocks(
         outputs=[status_text, saved_file],
     )
 
-
 if __name__ == "__main__":
-    demo.launch(server_name="0.0.0.0", server_port=7860, share=False)
+    import argparse
+    parser = argparse.ArgumentParser(description="OmniVoice Studio Pro Web UI")
+    parser.add_argument("--share", action="store_true", default=None, help="Bật link chia sẻ Gradio live (tự động bật trên Colab)")
+    parser.add_argument("--port", type=int, default=7860, help="Port chạy server (mặc định 7860)")
+    args, _ = parser.parse_known_args()
+
+    # Nhận diện môi trường Google Colab
+    is_colab = "COLAB_GPU" in os.environ or "COLAB_RELEASE_TAG" in os.environ or os.path.exists("/content")
+    if not is_colab:
+        try:
+            import importlib.util
+            if importlib.util.find_spec("google.colab") is not None:
+                is_colab = True
+        except Exception:
+            pass
+
+    share_mode = True if args.share is True or (args.share is None and is_colab) else False
+    inbrowser_mode = not is_colab and not share_mode
+
+    print(f"🚀 Khởi chạy Web UI: server=0.0.0.0, port={args.port}, share={share_mode}, in_colab={is_colab}")
+    demo.launch(server_name="0.0.0.0", server_port=args.port, share=share_mode, inbrowser=inbrowser_mode)
+

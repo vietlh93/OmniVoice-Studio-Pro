@@ -98,29 +98,29 @@ def _apply_cuda_global_flags() -> None:
     if _CUDA_OPTIMIZED:
         return  # Đã set rồi, bỏ qua
     if torch.cuda.is_available():
-        # --- TỐI ƯU HÓA CHO ĐỘ CHÍNH XÁC TUYỆT ĐỐI (MAXIMUM ACCURACY) ---
+        # --- TỐI ƯU HÓA HIỆU NĂNG CHO GPU NVIDIA ---
         
-        # 1. Dùng FP32 nguyên bản, KHÔNG dùng TF32 xấp xỉ
-        torch.set_float32_matmul_precision("highest")
-        torch.backends.cuda.matmul.allow_tf32 = False
-        torch.backends.cudnn.allow_tf32 = False
+        # 1. Cho phép sử dụng TF32 để tối ưu Tensor Cores
+        torch.set_float32_matmul_precision("high")
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
         
-        # 2. KHÔNG dùng FP16 để cộng dồn (tránh sai số làm tròn cực kỳ quan trọng cho Audio)
-        torch.backends.cuda.matmul.allow_fp16_reduced_precision_reduction = False
+        # 2. Cho phép giảm độ chính xác FP16 để tăng tốc độ
+        torch.backends.cuda.matmul.allow_fp16_reduced_precision_reduction = True
         
-        # 3. Ép cuDNN dùng các thuật toán chuẩn xác nhất, loại bỏ sự ngẫu nhiên
-        torch.backends.cudnn.benchmark = False
-        torch.backends.cudnn.deterministic = True
-        torch.use_deterministic_algorithms(True, warn_only=True) # Ép toàn bộ PyTorch dùng thuật toán Tất Định
+        # 3. Cho phép cuDNN tự tối ưu hóa thuật toán
+        torch.backends.cudnn.benchmark = True
+        torch.backends.cudnn.deterministic = False
+        torch.use_deterministic_algorithms(False)
         
-        # 4. Attention: CHỈ dùng Math SDP (chính xác tuyệt đối), TẮT Flash Attention và Mem Efficient Attention
+        # 4. Bật Flash Attention và Memory Efficient Attention để tăng tốc độ gấp nhiều lần
         try:
-            torch.backends.cuda.enable_math_sdp(True)          # Bật tính toán chính xác truyền thống (Math SDP)
-            torch.backends.cuda.enable_flash_sdp(False)        # Tắt FA2 để loại bỏ hoàn toàn sai số xấp xỉ
-            torch.backends.cuda.enable_mem_efficient_sdp(False) # Tắt Mem Efficient để đảm bảo bit-exactness
-            print("⚡ CUDA global flags: Đã cấu hình ưu tiên ĐỘ CHÍNH XÁC TUYỆT ĐỐI (FP32, Deterministic, Math SDP)\n")
+            torch.backends.cuda.enable_math_sdp(True)
+            torch.backends.cuda.enable_flash_sdp(True)
+            torch.backends.cuda.enable_mem_efficient_sdp(True)
+            print("⚡ CUDA global flags: Đã cấu hình tối ưu hiệu năng (Flash Attention & TF32 Enabled)\n")
         except Exception:
-            print("⚡ CUDA global flags: Đã cấu hình ưu tiên ĐỘ CHÍNH XÁC TUYỆT ĐỐI\n")
+            print("⚡ CUDA global flags: Đã cấu hình tối ưu hiệu năng\n")
 
     _CUDA_OPTIMIZED = True
 

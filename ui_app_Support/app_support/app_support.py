@@ -5,11 +5,8 @@ Import toàn bộ file này vào app.py bằng: from ui_app_Support.app_support.
 import os
 import sys
 import re
-import random
 import shutil
 import unicodedata
-import tempfile
-import librosa
 import soundfile as sf
 from pathlib import Path
 from typing import Optional
@@ -108,7 +105,6 @@ def get_wavs_dir() -> Path:
     project_root = Path(__file__).parent.parent.parent
     project_wavs = project_root / "wavs"
     if project_wavs.is_dir():
-        print(f"log path file project_wavs {project_wavs}")
         return project_wavs
 
     
@@ -247,81 +243,185 @@ def save_generated_audio_and_srt(audio_data, text: str, folder_path: str, srt_pa
 
 # ── Generate speech ───────────────────────────────────────────────────────────
 
-# ── Voice Profile Builder wrappers ────────────────────────────────────────────
 
-def run_build_voice_profile(MODEL, PRETRAINED_DIR, OUTPUT_DIR, build_voice_profile_fn, exaggeration_val: float) -> str:
-    """
-    Wrapper để Gradio gọi: build voice profile từ folder viterbox/pretrained/.
-    Truyền MODEL đang chạy vào để tái sử dụng — không cần load model mới.
-
-    Log được gom lại thành chuỗi và trả về Textbox trong UI.
-    """
-    lines = []
-    def _log(msg: str):
-        print(msg)       # vẫn in ra console để debug
-        lines.append(msg)
-
-    build_voice_profile_fn(
-        model=MODEL,             # Tái dùng model đang chạy, không load mới
-        pretrained_dir=PRETRAINED_DIR,
-        output_dir=OUTPUT_DIR,
-        exaggeration=exaggeration_val,
-        log_fn=_log,
-    )
-    return "\n".join(lines)
-
-
-def run_copy_profile_to_model(OUTPUT_DIR, MODEL_DIR, copy_profile_fn) -> str:
-    """
-    Wrapper để Gradio gọi: copy conds.pt từ viterbox/output-profile/ sang viterbox/modelViterboxLocal/.
-    Backup file cũ tự động trước khi ghi đè.
-    """
-    lines = []
-    def _log(msg: str):
-        print(msg)
-        lines.append(msg)
-
-    result = copy_profile_fn(
-        output_dir=OUTPUT_DIR,
-        model_dir=MODEL_DIR,
-        log_fn=_log,
-    )
-    lines.append(result)
-    return "\n".join(lines)
 
 
 # ── CSS ───────────────────────────────────────────────────────────────────────
 
 CSS = """
-body, .gradio-container { background: #0f172a !important; }
-.gradio-container { max-width: 100% !important; padding: 1rem 2rem !important; }
-.status-badge { 
-    display: inline-flex; align-items: center; padding: 4px 12px;
-    border-radius: 999px; font-size: 0.8rem; font-weight: 500;
-    background: #4f46e5; color: #fff;
+/* Voice Studio Pro - Dark Studio Theme */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+    --studio-bg: #090d16;
+    --card-bg: #121827;
+    --card-border: #1e293b;
+    --accent-indigo: #6366f1;
+    --accent-cyan: #06b6d4;
+    --accent-emerald: #10b981;
+    --accent-amber: #f59e0b;
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
 }
-#main-row { gap: 1rem !important; }
-#main-row > div { flex: 1 !important; min-width: 0 !important; }
-.card { 
-    background: #1e293b !important; border-radius: 0.75rem;
-    border: 1px solid #334155 !important; padding: 1rem 1.25rem; height: 100%;
+
+body, .gradio-container {
+    background-color: #090d16 !important;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    color: #f8fafc !important;
 }
-.section-title { 
-    font-size: 0.85rem; font-weight: 600; color: #e5e7eb;
-    margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem;
+
+.gradio-container {
+    max-width: 1440px !important;
+    padding: 1.25rem 2rem !important;
 }
-.generate-btn { 
-    background: #4f46e5 !important; border-radius: 0.5rem !important;
-    font-size: 1rem !important; padding: 10px 24px !important; margin-top: 0.75rem !important;
+
+/* Header Styling */
+.studio-header-card {
+    background: linear-gradient(135deg, rgba(18, 24, 39, 0.95) 0%, rgba(15, 23, 42, 0.85) 100%) !important;
+    border: 1px solid #1e293b !important;
+    border-radius: 1rem !important;
+    padding: 1.25rem 1.75rem !important;
+    margin-bottom: 1.25rem !important;
+    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5) !important;
 }
+
+.studio-title-text {
+    font-size: 1.8rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 40%, #818cf8 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin: 0;
+}
+
+.studio-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: rgba(99, 102, 241, 0.12);
+    color: #a5b4fc;
+    border: 1px solid rgba(99, 102, 241, 0.25);
+}
+
+.pulse-dot-green {
+    width: 8px;
+    height: 8px;
+    background-color: #10b981;
+    border-radius: 50%;
+    box-shadow: 0 0 10px #10b981;
+    display: inline-block;
+}
+
+/* Card Styling */
+.card, .studio-card {
+    background: #121827 !important;
+    border: 1px solid #1e293b !important;
+    border-radius: 1rem !important;
+    padding: 1.25rem !important;
+    box-shadow: 0 4px 25px -4px rgba(0, 0, 0, 0.3) !important;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+.card:hover, .studio-card:hover {
+    border-color: rgba(99, 102, 241, 0.35) !important;
+}
+
+.section-title, .studio-section-title {
+    font-size: 0.9rem !important;
+    font-weight: 700 !important;
+    color: #e2e8f0 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.06em !important;
+    margin-bottom: 0.75rem !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+/* Custom Tip Banner */
+.studio-tip-banner {
+    background: linear-gradient(135deg, rgba(30, 58, 138, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%);
+    border-left: 3px solid #38bdf8;
+    border-radius: 0.6rem;
+    padding: 0.75rem 1rem;
+    margin: 0.5rem 0 1rem 0;
+    font-size: 0.82rem;
+    color: #cbd5e1;
+    line-height: 1.5;
+}
+
+/* Form Controls & Inputs */
+input, textarea, select, .gr-box, .gr-input {
+    background-color: #0f172a !important;
+    border-color: #1e293b !important;
+    color: #f8fafc !important;
+    border-radius: 0.6rem !important;
+}
+
+input:focus, textarea:focus {
+    border-color: #6366f1 !important;
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25) !important;
+}
+
+/* Buttons */
+.generate-btn, .studio-btn-primary {
+    background: linear-gradient(135deg, #4f46e5 0%, #6366f1 50%, #0891b2 100%) !important;
+    border: none !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    font-size: 1rem !important;
+    padding: 0.85rem 1.5rem !important;
+    border-radius: 0.75rem !important;
+    box-shadow: 0 4px 20px rgba(79, 70, 229, 0.4) !important;
+    transition: all 0.2s ease !important;
+    cursor: pointer !important;
+}
+
+.generate-btn:hover, .studio-btn-primary:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 8px 25px rgba(79, 70, 229, 0.6) !important;
+}
+
+.studio-btn-secondary {
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%) !important;
+    border: 1px solid #475569 !important;
+    color: #f8fafc !important;
+    font-weight: 600 !important;
+    border-radius: 0.75rem !important;
+    transition: all 0.2s ease !important;
+}
+
+.studio-btn-secondary:hover {
+    background: #334155 !important;
+    border-color: #818cf8 !important;
+}
+
+/* Status Console */
+.status-console textarea {
+    font-family: 'JetBrains Mono', monospace !important;
+    background: #070a12 !important;
+    border: 1px solid #1e293b !important;
+    color: #38bdf8 !important;
+    font-size: 0.82rem !important;
+}
+
+/* Slider & Radios Styling */
+input[type="range"] {
+    accent-color: #6366f1 !important;
+}
+
 .output-card {
-    background: #1e293b !important; border-radius: 0.75rem;
-    border: 1px solid #334155 !important; padding: 1rem 1.25rem; margin-top: 0.75rem;
-}
-/* Accordion Settings: nền trong suốt (hiện nền .card #1e293b phía sau) */
-.settings-accordion.block {
-    --block-background-fill: transparent !important;
-    --block-border-color: transparent !important;
-    box-shadow: none !important;
+    background: #121827 !important;
+    border: 1px solid #1e293b !important;
+    border-radius: 1rem !important;
+    padding: 1.25rem !important;
+    margin-top: 1rem !important;
 }
 """

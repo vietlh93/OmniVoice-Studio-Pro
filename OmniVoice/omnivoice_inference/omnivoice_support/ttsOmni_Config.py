@@ -226,7 +226,7 @@ def inferWithModelOmni(
 
     # num_step: ưu tiên ĐỘ CHÍNH XÁC -> nên tăng vừa phải.
     # Tăng: thường chính xác và mượt hơn (đổi lại chậm hơn). Giảm: nhanh hơn nhưng dễ sai âm/nuốt âm.
-    num_step: Optional[int] = 64  # tối thiểu: 8, tối đa: 64 | khuyến nghị chính xác: 48-64
+    num_step: Optional[int] = 32  # tối thiểu: 8, tối đa: 64 | khuyến nghị chính xác: 48-64
 
     # guidance_scale: độ bám text/ref.
     # Tăng quá cao: có thể bị "gắt", méo tự nhiên; giảm quá thấp: dễ lệch nội dung. Muốn chính xác: dùng mức trung-cao.

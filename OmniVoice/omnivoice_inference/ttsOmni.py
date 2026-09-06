@@ -137,16 +137,16 @@ class Omni:
 
     def loadModelOmni(self) -> Any:
         if self.model is None:
-            dtype = torch.float32 # Ép toàn bộ về FP32 cho độ chính xác cao nhất
+            # Sử dụng BFloat16 trên GPU NVIDIA RTX (Ampere/Ada Lovelace) để tăng tốc vượt trội
+            dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float32
             omni_voice_cls = _import_omnivoice_class()
             model = cast(Any, omni_voice_cls.from_pretrained(
                 self.model_path,
                 dtype=dtype,
             ))
             model = model.to(self.device)
-
             self.model = model
-            print("📝 ASR chỉ load khi cần xài\n")
+            print(f"📝 Model loaded in dtype: {dtype} | ASR chỉ load khi cần xài\n")
         return cast(Any, self.model)
 
     def loadOmniFromUI(self):
@@ -170,6 +170,7 @@ def generate_speech_omni(
     ref_text: Optional[str] = None,
     speed: float = 1.0,
     pitch_shift: float = 1.0,            # F0 scaling pitch: 0.5~2.0 (1.0=bình thường)
+    progress=None,
 ):
     if not (text or "").strip():
         return None, "❌ Please enter some text", None
@@ -211,8 +212,16 @@ def generate_speech_omni(
     # Debug: Show speed effect on estimated duration
     if speed != 1.0:
         print(f"   📊 Speed {speed} sẽ tạo audio {'ngắn hơn' if speed > 1 else 'dài hơn'} ~{abs(speed-1)*100:.0f}% so với speed=1.0", flush=True)
+
+    total_spoken_segs = len(text_segs)
+    current_spoken_seg = 0
+
     for seg in segments:
         if seg["type"] == SEGMENT_TEXT:
+            current_spoken_seg += 1
+            if progress:
+                progress(0.2 + 0.7 * (current_spoken_seg / total_spoken_segs), desc=f"Đang sinh giọng nói (OmniVoice) - Câu {current_spoken_seg}/{total_spoken_segs}")
+
 
             spoken = seg["content"]
 
@@ -229,13 +238,6 @@ def generate_speech_omni(
 
             # audios là list, lấy phần tử đầu tiên
             getFirstAudio = audios[0]
-
-            # Debug: kiểm tra âm thanh đầu ra
-            if hasattr(getFirstAudio, 'shape'):
-                max_amp = float(np.max(np.abs(getFirstAudio))) if len(getFirstAudio) > 0 else 0.0
-                print(f"   🐛 [DEBUG] getFirstAudio: shape={getFirstAudio.shape}, max_amp={max_amp:.4f}")
-            else:
-                print(f"   🐛 [DEBUG] getFirstAudio: type={type(getFirstAudio)}")
 
             # giữ lại speech, bỏ non-speech
             getFirstAudio = vad_trim(getFirstAudio, omni.sampling_rate, margin_s=0.05)
