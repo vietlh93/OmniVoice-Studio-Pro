@@ -119,7 +119,7 @@ def list_voices() -> list[str]:
     """List available voice files từ folder wavs trong dự án."""
     wav_dir = get_wavs_dir()
     if wav_dir.is_dir():
-        return sorted([str(f) for f in wav_dir.glob("*.wav")])
+        return sorted([str(f) for f in wav_dir.iterdir() if f.is_file() and f.suffix.lower() == ".wav"])
     return []
 
 
