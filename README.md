@@ -1,234 +1,111 @@
-# 🎙️ Betterbox TTS - V2
+# 🎙️ OmniVoice Studio Pro
 
-### app base trên Vitterbox tts
+**High-Performance Neural Text-to-Speech & Voice Cloning Workstation**  
+Hệ thống nhân bản giọng nói AI thế hệ mới, hỗ trợ tiếng Việt và tiếng Anh, tối ưu độ tự nhiên và cảm xúc.
 
-## một số tính năng mới - chung: 
-- 1. bổ sung tùy chọn model Omnivoice hoặc Viterbox ngoài UI. click chọn là chạy.
-- 2. fix bug UI
-- 3. thêm tính năng *TẠO SRT FILE* - khi generate audio thì file SRT cũng sẽ tự generate luôn
-- 4. có tính năng silero VAD
-- 5. thêm voice doraemon và nobita 
-- 6. đã config lại tối ưu độ chính xác thay vì tốc độ
+---
 
-## một số tính năng mới - cho model Omnivoice
-- 1. đã có tính năng pitch control
-- 2. hiện model Omnivoice ĐÃ CÓ chức năng ngắt câu theo dấu câu. 
-- 3. thay model cũ 'ASR whisper' thành 'ASR Chunkformer' - tốc độ nhanh hơn, chính xác hơn, chuyên cho tiếng việt
-- 4. đã chuyển local cho model 'higgs-audio-v2-tokenizer '
+## ✨ Tính năng nổi bật
 
-## một số tính năng mới - cho model Viterbox
-- 1. thêm điều chỉnh tốc độ trực tiếp trong model s3gen
-- 2. bỏ giới hạn chỉ 6 giây audio mẫu - giờ audio mẫu lên tối đa 80 giây - tăng độ chính xác khi TTS, nhưng chờ lâu
-- 3. thêm tính năng 'Voice Profile Builder'. tối đa 26 phút audio -> giống với audio prompt, nhưng chỉ làm 1 lần, không ảnh hưởng hiệu năng khi TTS như audio prompt
-- 4. thêm EQ với thư viện pedalboard và pydub
-- 5. lưu vị trí download
-- 6. thêm tính năng pitch với thư viện pedalboard và pydub
-- 7. fix code để tránh lỗi tích lũy khi gen audio dài 
-- 8. fix lỗi nuốt chữ.
-- 9. thêm runApp.bat - sau khi có venv và cài thư viện với venv, chỉ cần click file này là chạy app
-- 10. tính năng 'Thứ tự:', cho phép file audio có thêm mục số ở đầu tên
-- 11. tính năng 'advance TTS' - cho câu rất chính xác, nhưng nghe như robot 😁
+- **Voice Cloning độ chính xác cao**: Nhân bản giọng nói bất kỳ từ file mẫu audio chỉ từ 3-10 giây với mô hình **OmniVoice Tiếng Việt (KhanhTTS)**.
+- **Tự động tạo phụ đề SRT**: Khi tạo giọng nói, hệ thống tự động đồng bộ và sinh file phụ đề `.srt` chính xác theo từng câu nói.
+- **ASR Chunkformer Tiếng Việt**: Tích hợp mô hình Chunkformer ASR chuyên sâu cho tiếng Việt để tự động nhận diện và bóc băng lời thoại từ file giọng mẫu.
+- **Higgs Audio V2 Tokenizer**: Sử dụng bộ mã hóa âm thanh hiện đại, giữ nguyên độ chi tiết và âm sắc tự nhiên của giọng nói.
+- **Tùy biến cao độ & tốc độ**: Cho phép điều chỉnh **Speed** (tốc độ nói) và **Pitch Shift** (cao độ giọng bổng/trầm) trực quan trên giao diện.
+- **Silero VAD lọc âm thông minh**: Tự động phát hiện khoảng lặng, ngắt câu theo ngữ nghĩa tự nhiên, hạn chế tối đa tình trạng nuốt chữ hoặc hụt hơi.
+- **Hỗ trợ 2 nền tảng**:
+  - **Chạy cục bộ trên Windows**: Khởi động 1-click bằng `runApp.bat`.
+  - **Chạy trên Google Colab**: Tự động toàn diện qua `OmniVoice_Studio_Colab.ipynb` (ẩn log rác, có thanh tiến trình trực quan).
 
-# 🔧 tải model viterbox TTS và đưa vào folder 'viterbox/modelViterboxLocal' 
-(tránh chép đè file conds.pt - đây là file config để voice mẫu hiện tại chạy chính xác)
-https://huggingface.co/dolly-vn/viterbox/tree/main
-
-
-# 🔧 tải model higgs-audio-v2-tokenizer và đưa vào folder 'OmniVoice\model_higgs_audio_v2_tokenizer_local' 
-(model này nằm trong pipeline của Omnivoice, bắt buộc phải có)
-https://huggingface.co/eustlb/higgs-audio-v2-tokenizer/tree/main
-
-
-# 🔧 tải model ASR Chunkformer và đưa vào folder 'OmniVoice/model_ASR_chunkformer_local' 
-(model này dùng để detect text cho âm thanh đầu vào - nếu không có text. lý do cần text cho audio mẫu là vì khi TTS bằng omniVoice sẽ chính xác hơn)
-(model này nằm trong pipeline của Omnivoice, bắt buộc phải có)
-https://huggingface.co/khanhld/chunkformer-ctc-large-vie/tree/main
-
-
-# 🔧 tải model Omnivoice (bản fine-tune tiếng việt) và đưa vào folder 'OmniVoice/modelOmniLocal' 
-https://huggingface.co/kjanh/KhanhTTS-OmniVoice
-
-
-# 🔧 hoặc (Optional), tải model Omnivoice (bản gốc) và đưa vào folder 'OmniVoice/modelOmniLocal' 
-https://huggingface.co/k2-fsa/OmniVoice/tree/main
-
-
-## một vài lưu ý về reference sound: 
-- 1. file text nên để đuôi .txt, file âm thanh nên để đuôi .wav. và cả 2 file cần trùng tên nhau
-- 2. file text và âm thanh của 'reference_sound' (nằm trong folder 'wavs') cần giống tên nhau, để model Omnivoice lấy mẫu tốt nhất. vì file text sẽ được đưa vào model Omnivoice để nó học giọng mẫu
-- 3. với model Omnivoice, file text và âm thanh nên từ 3 - 10 giây là đủ
-- 4. với model viterbox TTS, file text có thể tối đa 80 giây, nhưng khi inference sẽ chậm và tốn VRAM
-
-## một vài lưu ý về text cho audio. 
-- text dài bao nhiêu cũng được, miễn là, khoảng cách text giữa các dấu câu ( text dài,đọc liên hồi, không ngắt nghỉ) đừng dài quá 30 giây là được
+---
 
 ## 📁 Cấu trúc dự án
 
 ```
-viterbox-TTS=GPU/
-├── app.py                  # Gradio Web UI
-├── inference.py            # CLI inference script
-└── general/                # Core library
-    ├── general/requirements.txt    # Dependencies (Windows/Linux)
-    ├── general/requirements-mac.txt# Dependencies (macOS)
-    ├── config_path.txt     # lưu đường dẫn folder download audio
-    └── EQ_emotion_config/  # chứa các file config âm thanh bằng EQ
-├── pyproject.toml          # Package config
-├── README.md
-├── wavs/                   # Thư mục chứa giọng mẫu
-│   └── *.wav
-├── OmniVoice/              # folder với model OmniVoice + file inference
-│   ├── modelOmniLocal/     # Thư mục chứa model local OmniVoice
-│   ├── omnivoice/          # Model components OmniVoice
-│   └── omnivoice_inference/# Folder chứa phần suy luận của OmniVoice
-│       └── ttsOmni.py      # File suy luận cho Omnivoice
-└── viterbox/               # Core library
-    ├── modelViterboxLocal/ # Thư mục chứa model local Viterbox(base trên Chatterbox)
-    ├── output-profile/     # Thư mục chứa file kết quả của Voice Profile
-    ├── pretrained/         # Thư mục chứa audio + text cho Voice Profile
-    ├── __init__.py
-    ├── tts.py              # Main Viterbox class
-    └── models/             # Model components
-        ├── t3/             # T3 Text-to-Token model
-        ├── s3gen/          # S3Gen vocoder
-        ├── s3tokenizer/    # Speech tokenizer
-        ├── voice_encoder/  # Speaker encoder
-        └── tokenizers/     # Text tokenizer
+OmniVoice-Studio-Pro/
+├── app.py                         # Giao diện chính Gradio Web UI
+├── runApp.bat                     # Script khởi chạy nhanh trên Windows
+├── OmniVoice_Studio_Colab.ipynb   # Notebook khởi chạy trên Google Colab
+├── OmniVoiceStudioPro.spec        # Cấu hình đóng gói ứng dụng PyInstaller
+├── general/                       # Thư viện hỗ trợ & cấu hình
+│   ├── general_tool_audio.py      # Xử lý text và chuẩn hóa âm thanh
+│   ├── noise_detect_VAD.py        # Tích hợp Silero VAD
+│   ├── requirements.txt           # Danh sách thư viện (Windows / Linux)
+│   └── requirements-mac.txt       # Danh sách thư viện (macOS)
+├── OmniVoice/                     # Pipeline mô hình OmniVoice
+│   ├── modelOmniLocal/            # Thư mục chứa model OmniVoice Tiếng Việt
+│   ├── model_ASR_chunkformer_local# Model ASR Chunkformer VIE
+│   ├── model_higgs_audio_v2_tokenizer_local # Higgs Tokenizer
+│   ├── omnivoice/                 # Kiến trúc mô hình OmniVoice
+│   └── omnivoice_inference/       # Logic suy luận (ttsOmni.py)
+├── ui_app_Support/                # Giao diện & CSS Dark Studio Theme
+└── wavs/                          # Thư mục chứa các giọng nói mẫu (.wav + .txt)
+    ├── ngochuyen.wav
+    ├── ngochuyen.txt
+    └── ...
 ```
 
 ---
 
-## 📦 Cài đặt - cách cài đặt venv và thư viện ở bản V2 thì y như cũ
+## 🧠 Các mô hình AI cần thiết
 
-### Yêu cầu hệ thống
+Khi chạy trên **Google Colab**, file notebook sẽ tự động tải các model này. Khi cài đặt **cục bộ trên máy tính**, tải 3 model sau và đặt vào đúng thư mục:
 
-- **Python**: 3.10+
-- **CUDA**: 11.8+ (khuyến nghị)
-- **RAM**: 8GB+
-- **VRAM**: 6GB+ (GPU) - 8GB nếu xài Omnivoice 
-(10GB+ nếu xài từ 20 phút chức năng 'Voice Profile Builder' của Viterbox)
+1. **Higgs Audio V2 Tokenizer** ➔ `OmniVoice/model_higgs_audio_v2_tokenizer_local`  
+   👉 [huggingface.co/eustlb/higgs-audio-v2-tokenizer](https://huggingface.co/eustlb/higgs-audio-v2-tokenizer)
 
-### Cài đặt từ source
+2. **ASR Chunkformer Tiếng Việt** ➔ `OmniVoice/model_ASR_chunkformer_local`  
+   👉 [huggingface.co/khanhld/chunkformer-ctc-large-vie](https://huggingface.co/khanhld/chunkformer-ctc-large-vie)
 
+3. **OmniVoice Tiếng Việt (KhanhTTS)** ➔ `OmniVoice/modelOmniLocal`  
+   👉 [huggingface.co/kjanh/KhanhTTS-OmniVoice](https://huggingface.co/kjanh/KhanhTTS-OmniVoice)
+
+---
+
+## 🚀 Hướng dẫn cài đặt & sử dụng
+
+### Cách 1: Chạy trên Google Colab (Không cần GPU máy tính)
+
+1. Mở notebook `OmniVoice_Studio_Colab.ipynb` trực tiếp trên Google Colab.
+2. Vào menu **Runtime** ➔ **Change runtime type** ➔ Chọn **T4 GPU** ➔ Bấm **Save**.
+3. Bấm **Runtime** ➔ **Run all** (hoặc nhấn `Ctrl + F9`).
+4. Giao diện Web UI sẽ hiển thị kèm link công khai `gradio.live`.
+
+### Cách 2: Chạy cục bộ trên Windows
+
+#### Yêu cầu hệ thống:
+- **Python**: 3.10 hoặc 3.11
+- **GPU NVIDIA**: Tối thiểu 6GB VRAM (khuyên dùng 8GB VRAM trở lên)
+
+#### Các bước cài đặt:
 ```bash
-# Clone repo
+# 1. Clone repository
 git clone https://github.com/vietlh93/OmniVoice-Studio-Pro.git
 cd OmniVoice-Studio-Pro
 
-# Tạo virtual environment (khuyến nghị) - tạo trong thư mục viterbox
+# 2. Tạo môi trường ảo venv
 python -m venv venv
 
-# bật venv lên - bắt buộc để cài được lib
-source venv/bin/activate  # Linux/Mac
-# hoặc: venv\Scripts\activate  # Windows
+# 3. Kích hoạt venv
+venv\Scripts\activate
 
-# back ra ngoài 
-cd ..
+# 4. Cài đặt thư viện dependencies
+pip install -r general/requirements.txt
 
-# vào thư mục general - để cài các lib có trong file 'requirements.txt'
-cd general
-
-# Cài đặt dependencies
-pip install -r requirements.txt
-
-# sau khi đã cài venv + download model về local. sau này chỉ cần click file 'runApp.bat' - file tự động bật venv và chạy
-```
-
-### Cài đặt với pip
-
-```bash
-pip install -e .
-```
-
----
-
-## 🚀 Sử dụng
-
-### 1. Giao diện Web (Gradio) - nhớ bật venv trước khi chạy
-
-```bash
+# 5. Khởi chạy ứng dụng
 python app.py
 ```
-
-Mở trình duyệt tại `http://localhost:7860` hoặc `http://127.0.0.1:7860`
-
-hoặc sau khi có venv, thì chạy file 'runApp.bat' - file tự động bật venv và chạy
+*(Sau lần cài đặt đầu tiên, các lần sau chỉ cần nhấp đúp file `runApp.bat` để chạy ứng dụng).*
 
 ---
 
-## 👉👉👉 Thông số dành cho model Omnivoice
-- xem trên: https://huggingface.co/k2-fsa/OmniVoice
-- cấu hình khi chạy Omnivoice: 7GB VRAM - nếu thiếu sẽ tự load một phần lên RAM, nhưng sẽ chậm
+## 💡 Lưu ý về giọng mẫu (Reference Sound)
 
-## 👉👉👉 Thông số dành cho model viterbox tts
-
-## 🎛️ Tham số
-
-| Tham số | Mô tả | Giá trị | Mặc định |
-|---------|-------|---------|----------|
-| `text` | Văn bản cần đọc | string | (bắt buộc) |
-| `language` | Mã ngôn ngữ | `"vi"`, `"en"` | `"vi"` |
-| `audio_prompt` | Audio mẫu cho voice cloning | path/tensor | `None` |
-| `exaggeration` | Mức độ biểu cảm | 0.0 - 2.0 | 0.5 |
-| `cfg_weight` | Độ bám sát giọng mẫu | 0.0 - 1.0 | 0.5 |
-| `temperature` | Độ ngẫu nhiên/sáng tạo | 0.1 - 1.0 | 0.8 |
-| `top_p` | Top-p sampling | 0.0 - 1.0 | 0.9 |
-| `repetition_penalty` | Phạt lặp từ | 1.0 - 2.0 | 1.2 |
-| `sentence_pause_ms` | Thời gian ngắt giữa câu | 0 - 2000 | 500 |
-| `crossfade_ms` | Thời gian crossfade | 0 - 100 | 50 |
-
-### Giải thích tham số
-
-- **exaggeration**: Tăng để giọng biểu cảm hơn, giảm để giọng trầm tĩnh hơn
-- **cfg_weight**: Tăng để giọng giống mẫu hơn, giảm để tự nhiên hơn
-- **temperature**: Tăng để giọng đa dạng hơn, giảm để ổn định hơn
-- **sentence_pause_ms**: Thời gian nghỉ giữa các câu (hữu ích cho văn bản dài)
-- **Pitch Shift (semitones)**: cao độ (tone) của giọng đầu ra
+1. Để đạt chất lượng nhân bản tốt nhất, đặt file âm thanh mẫu `.wav` và file bóc băng `.txt` trùng tên trong thư mục `wavs/` (Ví dụ: `wavs/ngoc_huyen.wav` và `wavs/ngoc_huyen.txt`).
+2. Thời lượng mẫu khuyến nghị từ **3 đến 10 giây**, giọng đọc rõ ràng, không lẫn nhạc nền hoặc tạp âm lớn.
+3. Người dùng cũng có thể tải trực tiếp file âm thanh bất kỳ qua ô **"Upload / Record Reference Audio"** trên giao diện Web UI.
 
 ---
-
-
-## 🧠 Lưu ý khi tạo Voice Profile
-
-Áp dụng cho dữ liệu trong folder `viterbox/pretrained/`:
-
-1. **Chỉ dùng 1 giọng duy nhất**  
-   Trộn nhiều giọng sẽ làm output không ổn định.
-2. **Nên có file text đi kèm từng audio**  
-   Đặt cùng tên, ví dụ: `clip1.mp3` + `clip1.txt`.  
-   App dùng text để chọn window 80s đa dạng âm vị hơn.
-3. **Độ dài audio tối đa 26 phút - nên để 25 phút thôi**  
-   `speaker_emb` và `x-vector` được tính từ toàn bộ audio (không cắt 80s).  
-   Acoustic context (Perceiver Average) tổng hợp từ tối đa 20 cửa sổ x 80s (~26 phút).
-4. trong folder 'viterbox/pretrained' đã để sẵn audio và text (tạo bởi AI) để chạy chức năng này
-
-- Audio prompt khi chạy app nên cùng giọng với audio đã dùng để build profile.  
-- Kết quả build là file `conds.pt` trong `viterbox/output-profile/`.  
-- Dùng nút `Copy -> modelViterboxLocal` để app dùng ngay (cần restart app), file sẽ được copy vào `viterbox/modelViterboxLocal/`.
-
----
-
-## ⚠️ Lưu ý
-
-- **Audio mẫu**: Nên sử dụng audio sạch, không nhiễu, 3-10 giây
-- **VRAM**: Model cần ~6GB VRAM, nếu không đủ có thể dùng CPU (chậm hơn)
-- **Văn bản**: Hỗ trợ tốt nhất với văn bản có dấu đầy đủ
-
----
-
-## 📄 License
-
-**CC BY-NC 4.0** (Creative Commons Attribution-NonCommercial 4.0)
-
-- ✅ Được sử dụng cho mục đích **phi thương mại**
-- ✅ Được chia sẻ, sửa đổi với ghi nguồn
-- ❌ **KHÔNG** được sử dụng cho mục đích thương mại
-- ❌ **KHÔNG** được sử dụng cho mục đích xấu xa
-- file audio là người thật đọc, mình lấy từ tiktok.
-
----
-
-[⬆ Về đầu trang](#️-betterbox-tts)
 
 ## Star History
 
