@@ -345,24 +345,11 @@ class OmniVoice(PreTrainedModel):
                 _apply_cuda_global_flags()
 
                 # -------------------------------------------------------
-                # torch.compile cho LLM backbone (chỉ áp dụng 1 lần).
-                # Bỏ qua trên Windows vì Triton chưa hỗ trợ.
+                # Chạy Eager mode trực tiếp (không dùng torch.compile)
+                # để loại bỏ hoàn toàn độ trễ biên dịch Triton (1-2 phút)
+                # và tránh đứng/treo ở đoạn 1 trên Google Colab GPU T4.
                 # -------------------------------------------------------
-                import platform
-                if platform.system() != "Windows":
-                    try:
-                        model.llm = torch.compile(
-                            model.llm, mode="reduce-overhead", dynamic=True
-                        )
-                        print("⚡ torch.compile applied to LLM backbone (reduce-overhead)\n")
-                    except Exception as e:
-                        print(f"⚠️ torch.compile failed (sẽ dùng eager mode): {e}\n")
-                else:
-                    # Windows không hỗ trợ Triton nên bỏ qua torch.compile.
-                    # Ép toàn bộ model sang FP32 để tính toán activation ở độ phân giải cao nhất
-                    # (Ngăn chặn sai số làm tròn của FP16/BF16 trong quá trình cộng dồn ma trận)
-                    model = model.to(dtype=torch.float32)
-                    print("⚡ Windows: Chạy Eager mode FP32 mặc định, ưu tiên ĐỘ CHÍNH XÁC TUYỆT ĐỐI\n")
+                print("⚡ Chạy Eager mode trực tiếp (không độ trễ biên dịch Triton ở đoạn 1)\n")
 
         finally:
             logging.disable(_prev_disable)
