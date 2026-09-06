@@ -112,10 +112,8 @@ viterbox-TTS=GPU/
 
 ```bash
 # Clone repo
-git clone https://github.com/nowtranminh1-TTS/BetterBox-TTS.git
-
-# vào thư mục viterbox
-cd viterbox
+git clone https://github.com/vietlh93/OmniVoice-Studio-Pro.git
+cd OmniVoice-Studio-Pro
 
 # Tạo virtual environment (khuyến nghị) - tạo trong thư mục viterbox
 python -m venv venv
@@ -234,10 +232,10 @@ hoặc sau khi có venv, thì chạy file 'runApp.bat' - file tự động bật
 
 ## Star History
 
-<a href="https://www.star-history.com/?repos=nowtranminh1-TTS%2FBetterBox-TTS&type=date&legend=top-left">
+<a href="https://www.star-history.com/?repos=vietlh93%2FOmniVoice-Studio-Pro&type=date&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=nowtranminh1-TTS/BetterBox-TTS&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=nowtranminh1-TTS/BetterBox-TTS&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=nowtranminh1-TTS/BetterBox-TTS&type=date&legend=top-left" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=vietlh93/OmniVoice-Studio-Pro&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=vietlh93/OmniVoice-Studio-Pro&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=vietlh93/OmniVoice-Studio-Pro&type=date&legend=top-left" />
  </picture>
 </a>
